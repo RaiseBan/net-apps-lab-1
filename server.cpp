@@ -240,40 +240,34 @@ void broadcast_message(const char* nickname, uint32_t nickname_size,
     if (!client->active) continue;
 
     // Send to all clients including sender
-    ssize_t sent = 0;
-
-    sent = send(client->socket, &nickname_size_net, 4, MSG_NOSIGNAL);
-    if (sent <= 0) {
+    // Send all fields, ensuring complete transmission
+    if (send(client->socket, &nickname_size_net, 4, 0) != 4) {
       client->active = false;
       continue;
     }
 
-    sent = send(client->socket, nickname, nickname_size, MSG_NOSIGNAL);
-    if (sent <= 0) {
+    if (send(client->socket, nickname, nickname_size, 0) !=
+        (ssize_t)nickname_size) {
       client->active = false;
       continue;
     }
 
-    sent = send(client->socket, &body_size_net, 4, MSG_NOSIGNAL);
-    if (sent <= 0) {
+    if (send(client->socket, &body_size_net, 4, 0) != 4) {
       client->active = false;
       continue;
     }
 
-    sent = send(client->socket, body, body_size, MSG_NOSIGNAL);
-    if (sent <= 0) {
+    if (send(client->socket, body, body_size, 0) != (ssize_t)body_size) {
       client->active = false;
       continue;
     }
 
-    sent = send(client->socket, &date_size_net, 4, MSG_NOSIGNAL);
-    if (sent <= 0) {
+    if (send(client->socket, &date_size_net, 4, 0) != 4) {
       client->active = false;
       continue;
     }
 
-    sent = send(client->socket, time_str, date_size, MSG_NOSIGNAL);
-    if (sent <= 0) {
+    if (send(client->socket, time_str, date_size, 0) != (ssize_t)date_size) {
       client->active = false;
       continue;
     }

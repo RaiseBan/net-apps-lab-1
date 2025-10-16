@@ -89,64 +89,91 @@ int main(int argc, char* argv[]) {
     exit(1);
   }
 
-  // Set terminal to raw mode for character-by-character input
-  set_terminal_mode(true);
+  bool is_tty = isatty(STDIN_FILENO);
 
-  // Main input loop
-  std::string input_buffer;
-  char ch;
-  while (client_data.running) {
-    if (read(STDIN_FILENO, &ch, 1) <= 0) {
-      break;
-    }
+  if (is_tty) {
+    set_terminal_mode(true);
 
-    if (!client_data.input_mode) {
-      // Not in input mode - wait for 'm' key
-      if (ch == 'm' || ch == 'M') {
-        client_data.input_mode = true;
-        pthread_mutex_lock(&client_data.print_mutex);
-        printf("\r[Message mode] > ");
-        fflush(stdout);
-        pthread_mutex_unlock(&client_data.print_mutex);
-        input_buffer.clear();
+    // Main input loop
+    std::string input_buffer;
+    char ch;
+    while (client_data.running) {
+      ssize_t n = read(STDIN_FILENO, &ch, 1);
+      if (n <= 0) {
+        break;
       }
-    } else {
-      // In input mode
-      if (ch == '\n' || ch == '\r') {
-        // Send message
-        if (!input_buffer.empty()) {
+
+      if (!client_data.input_mode) {
+        // Not in input mode - wait for 'm' key
+        if (ch == 'm' || ch == 'M') {
+          client_data.input_mode = true;
           pthread_mutex_lock(&client_data.print_mutex);
-          printf("\r");
-          clear_line();
+          printf("\r[Message mode] > ");
           fflush(stdout);
           pthread_mutex_unlock(&client_data.print_mutex);
-
-          send_message(sockfd, nickname, input_buffer.c_str());
           input_buffer.clear();
         }
-        client_data.input_mode = false;
-      } else if (ch == 127 || ch == 8) {
-        // Backspace
-        if (!input_buffer.empty()) {
-          input_buffer.pop_back();
+      } else {
+        // In input mode
+        if (ch == '\n' || ch == '\r') {
+          // Send message
+          if (!input_buffer.empty()) {
+            pthread_mutex_lock(&client_data.print_mutex);
+            printf("\r");
+            clear_line();
+            fflush(stdout);
+            pthread_mutex_unlock(&client_data.print_mutex);
+
+            send_message(sockfd, nickname, input_buffer.c_str());
+            input_buffer.clear();
+          }
+          client_data.input_mode = false;
+        } else if (ch == 127 || ch == 8) {
+          // Backspace
+          if (!input_buffer.empty()) {
+            input_buffer.pop_back();
+            pthread_mutex_lock(&client_data.print_mutex);
+            printf("\b \b");
+            fflush(stdout);
+            pthread_mutex_unlock(&client_data.print_mutex);
+          }
+        } else if (ch >= 32 && ch < 127) {
+          // Printable character
+          input_buffer += ch;
           pthread_mutex_lock(&client_data.print_mutex);
-          printf("\b \b");
+          printf("%c", ch);
           fflush(stdout);
           pthread_mutex_unlock(&client_data.print_mutex);
         }
-      } else if (ch >= 32 && ch < 127) {
-        // Printable character
-        input_buffer += ch;
-        pthread_mutex_lock(&client_data.print_mutex);
-        printf("%c", ch);
-        fflush(stdout);
-        pthread_mutex_unlock(&client_data.print_mutex);
+      }
+    }
+
+    set_terminal_mode(false);
+  } else {
+    char line[4096];
+    while (client_data.running && fgets(line, sizeof(line), stdin)) {
+      size_t len = strlen(line);
+      if (len > 0 && line[len - 1] == '\n') {
+        line[len - 1] = '\0';
+        len--;
+      }
+
+      if (strcmp(line, "m") == 0 || strcmp(line, "M") == 0) {
+        if (fgets(line, sizeof(line), stdin)) {
+          len = strlen(line);
+          if (len > 0 && line[len - 1] == '\n') {
+            line[len - 1] = '\0';
+            len--;
+          }
+          if (len > 0) {
+            send_message(sockfd, nickname, line);
+          }
+        }
       }
     }
   }
 
   // Cleanup
-  set_terminal_mode(false);
   client_data.running = false;
   close(sockfd);
   pthread_join(recv_thread, NULL);
@@ -238,14 +265,12 @@ void* receive_messages(void*) {
     // Display message
     pthread_mutex_lock(&client_data.print_mutex);
     if (client_data.input_mode) {
-      // In input mode - print message above input line
       printf("\r");
       clear_line();
       printf("{%s} [%s] %s\n", date, nickname, body);
       printf("[Message mode] > ");
       fflush(stdout);
     } else {
-      // Not in input mode - just print
       printf("{%s} [%s] %s\n", date, nickname, body);
       fflush(stdout);
     }
@@ -264,14 +289,24 @@ void send_message(int socket, const char* nickname, const char* message) {
   // Send nickname size and nickname
   uint32_t nickname_size = strlen(nickname);
   uint32_t nickname_size_net = htonl(nickname_size);
-  send(socket, &nickname_size_net, 4, MSG_NOSIGNAL);
-  send(socket, nickname, nickname_size, MSG_NOSIGNAL);
+
+  if (send(socket, &nickname_size_net, 4, 0) != 4) {
+    return;
+  }
+  if (send(socket, nickname, nickname_size, 0) != (ssize_t)nickname_size) {
+    return;
+  }
 
   // Send message size and message
   uint32_t message_size = strlen(message);
   uint32_t message_size_net = htonl(message_size);
-  send(socket, &message_size_net, 4, MSG_NOSIGNAL);
-  send(socket, message, message_size, MSG_NOSIGNAL);
+
+  if (send(socket, &message_size_net, 4, 0) != 4) {
+    return;
+  }
+  if (send(socket, message, message_size, 0) != (ssize_t)message_size) {
+    return;
+  }
 }
 
 void set_terminal_mode(bool raw) {
@@ -291,6 +326,4 @@ void set_terminal_mode(bool raw) {
   }
 }
 
-void clear_line() {
-  printf("\033[2K");  // Clear entire line
-}
+void clear_line() { printf("\033[2K"); }
