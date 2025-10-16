@@ -220,6 +220,13 @@ void* handle_client(void* arg) {
   printf("Client disconnected (socket %d)\n", socket);
   fflush(stdout);
   remove_client(socket);
+
+  // Wait for all data to be sent before closing
+  struct linger so_linger;
+  so_linger.l_onoff = 1;
+  so_linger.l_linger = 2;  // 2 seconds timeout
+  setsockopt(socket, SOL_SOCKET, SO_LINGER, &so_linger, sizeof(so_linger));
+
   close(socket);
   return NULL;
 }
