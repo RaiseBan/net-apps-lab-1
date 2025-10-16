@@ -29,6 +29,8 @@ void* handle_client(void* arg);
 void broadcast_message(const char* nickname, uint32_t nickname_size,
                        const char* body, uint32_t body_size, int);
 void remove_client(int socket);
+ssize_t send_all(int socket, const void* buffer, size_t length);
+ssize_t recv_all(int socket, void* buffer, size_t length);
 
 int main(int argc, char* argv[]) {
   if (argc < 2) {
@@ -155,8 +157,8 @@ void* handle_client(void* arg) {
   while (client->active) {
     // Read nickname size
     uint32_t nickname_size_net;
-    ssize_t n = recv(socket, &nickname_size_net, 4, MSG_WAITALL);
-    if (n <= 0) {
+    ssize_t n = recv_all(socket, &nickname_size_net, 4);
+    if (n != 4) {
       break;
     }
     uint32_t nickname_size = ntohl(nickname_size_net);
@@ -168,8 +170,8 @@ void* handle_client(void* arg) {
 
     // Read nickname
     char* nickname = new char[nickname_size + 1];
-    n = recv(socket, nickname, nickname_size, MSG_WAITALL);
-    if (n <= 0) {
+    n = recv_all(socket, nickname, nickname_size);
+    if (n != (ssize_t)nickname_size) {
       delete[] nickname;
       break;
     }
@@ -177,8 +179,8 @@ void* handle_client(void* arg) {
 
     // Read body size
     uint32_t body_size_net;
-    n = recv(socket, &body_size_net, 4, MSG_WAITALL);
-    if (n <= 0) {
+    n = recv_all(socket, &body_size_net, 4);
+    if (n != 4) {
       delete[] nickname;
       break;
     }
@@ -192,8 +194,8 @@ void* handle_client(void* arg) {
 
     // Read body
     char* body = new char[body_size + 1];
-    n = recv(socket, body, body_size, MSG_WAITALL);
-    if (n <= 0) {
+    n = recv_all(socket, body, body_size);
+    if (n != (ssize_t)body_size) {
       delete[] nickname;
       delete[] body;
       break;
@@ -274,6 +276,38 @@ void broadcast_message(const char* nickname, uint32_t nickname_size,
   }
 
   pthread_mutex_unlock(&server_data.clients_mutex);
+}
+
+ssize_t send_all(int socket, const void* buffer, size_t length) {
+  const char* ptr = (const char*)buffer;
+  size_t remaining = length;
+
+  while (remaining > 0) {
+    ssize_t sent = send(socket, ptr, remaining, 0);
+    if (sent <= 0) {
+      return sent;
+    }
+    ptr += sent;
+    remaining -= sent;
+  }
+
+  return length;
+}
+
+ssize_t recv_all(int socket, void* buffer, size_t length) {
+  char* ptr = (char*)buffer;
+  size_t remaining = length;
+
+  while (remaining > 0) {
+    ssize_t received = recv(socket, ptr, remaining, 0);
+    if (received <= 0) {
+      return received;
+    }
+    ptr += received;
+    remaining -= received;
+  }
+
+  return length;
 }
 
 void remove_client(int socket) {
