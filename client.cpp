@@ -152,6 +152,7 @@ int main(int argc, char* argv[]) {
 
     set_terminal_mode(false);
   } else {
+    // Non-interactive mode (pipe) - read line by line
     char line[4096];
     while (client_data.running && fgets(line, sizeof(line), stdin)) {
       size_t len = strlen(line);
@@ -169,10 +170,14 @@ int main(int argc, char* argv[]) {
           }
           if (len > 0) {
             send_message(sockfd, nickname, line);
+            // Give receive thread time to get the broadcast
+            usleep(100000);  // 100ms
           }
         }
       }
     }
+    // Wait a bit more for any pending messages
+    usleep(100000);
   }
 
   // Cleanup

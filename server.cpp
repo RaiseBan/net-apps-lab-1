@@ -212,6 +212,9 @@ void* handle_client(void* arg) {
     delete[] body;
   }
 
+  // Give broadcast time to complete before closing
+  usleep(50000);  // 50ms
+
   printf("Client disconnected (socket %d)\n", socket);
   fflush(stdout);
   remove_client(socket);
