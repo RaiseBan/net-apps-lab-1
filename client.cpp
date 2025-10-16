@@ -1,6 +1,7 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -77,6 +78,11 @@ int main(int argc, char* argv[]) {
   }
 
   client_data.socket = sockfd;
+
+  // Set TCP_NODELAY for low latency
+  int flag = 1;
+  setsockopt(sockfd, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
+
   printf("Connected to server as '%s'\n", nickname);
   printf(
       "Press 'm' to enter message mode, then type your message and press "
@@ -336,7 +342,7 @@ ssize_t send_all(int socket, const void* buffer, size_t length) {
   size_t remaining = length;
 
   while (remaining > 0) {
-    ssize_t sent = send(socket, ptr, remaining, 0);
+    ssize_t sent = send(socket, ptr, remaining, MSG_NOSIGNAL);
     if (sent <= 0) {
       return sent;
     }

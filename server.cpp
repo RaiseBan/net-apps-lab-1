@@ -1,5 +1,6 @@
 #include <arpa/inet.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -117,6 +118,10 @@ int main(int argc, char* argv[]) {
     printf("New client connected (socket %d)\n", client_socket);
     fflush(stdout);
 
+    // Set TCP_NODELAY to disable Nagle's algorithm for low latency
+    int flag = 1;
+    setsockopt(client_socket, IPPROTO_TCP, TCP_NODELAY, &flag, sizeof(flag));
+
     // Create client structure
     Client* client = new Client();
     client->socket = client_socket;
@@ -210,16 +215,11 @@ void* handle_client(void* arg) {
 
     delete[] nickname;
     delete[] body;
-
-    // Give broadcast time to reach clients before reading next message
-    usleep(50000);  // 50ms
   }
 
   printf("Client disconnected (socket %d)\n", socket);
   fflush(stdout);
   remove_client(socket);
-  shutdown(socket, SHUT_RDWR);
-  usleep(10000);  // 10ms for data to flush
   close(socket);
   return NULL;
 }
@@ -288,7 +288,7 @@ ssize_t send_all(int socket, const void* buffer, size_t length) {
   size_t remaining = length;
 
   while (remaining > 0) {
-    ssize_t sent = send(socket, ptr, remaining, 0);
+    ssize_t sent = send(socket, ptr, remaining, MSG_NOSIGNAL);
     if (sent <= 0) {
       return sent;
     }
