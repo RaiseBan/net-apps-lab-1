@@ -170,14 +170,10 @@ int main(int argc, char* argv[]) {
           }
           if (len > 0) {
             send_message(sockfd, nickname, line);
-            // Give receive thread time to get the broadcast
-            usleep(100000);  // 100ms
           }
         }
       }
     }
-    // Wait a bit more for any pending messages
-    usleep(100000);
   }
 
   // Cleanup

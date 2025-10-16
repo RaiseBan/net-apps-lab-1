@@ -210,14 +210,16 @@ void* handle_client(void* arg) {
 
     delete[] nickname;
     delete[] body;
-  }
 
-  // Give broadcast time to complete before closing
-  usleep(50000);  // 50ms
+    // Give broadcast time to reach clients before reading next message
+    usleep(50000);  // 50ms
+  }
 
   printf("Client disconnected (socket %d)\n", socket);
   fflush(stdout);
   remove_client(socket);
+  shutdown(socket, SHUT_RDWR);
+  usleep(10000);  // 10ms for data to flush
   close(socket);
   return NULL;
 }
